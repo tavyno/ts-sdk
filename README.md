@@ -72,17 +72,18 @@ Use semantic versions. Breaking public contract changes require the appropriate
 major version (during 0.x, communicate breaking changes with a minor version).
 
 1. Merge a validated version/lockfile update, e.g. `npm version patch --no-git-tag-version`.
-2. Configure a GitHub environment named `npm` with required reviewers and tag
-   restrictions. Protect release tags and main in repository settings.
+2. Configure a GitHub environment named `npm` with required reviewers and restrict
+   deployments to the `main` branch. Protect main in repository settings.
 3. Configure npm Trusted Publishing for `@tavyno/ts-sdk`: GitHub organization
    `Tavyno`, repository `sdk`, workflow `release.yml`, environment `npm`,
    with publishing allowed. This requires npm organization/package permissions.
    For a new package, an owner may need to bootstrap its first publication before
    its trusted-publisher settings are available. Never commit a token.
-4. Create and push a matching tag (e.g. `v0.1.0`) on the reviewed commit.
-5. `release.yml` validates the tag, runs checks and isolated package tests, then
-   waits for the environment approval. The publish job repeats validation before
-   `npm publish --access public --provenance` using OIDC.
+4. Merge the version/lockfile update to `main` (for example, version `0.1.0`).
+5. `release.yml` checks that the version is new and greater than every published
+   version, runs checks and isolated package tests, then waits for environment
+   approval. The publish job repeats validation before `npm publish --access
+   public --provenance` using OIDC.
 6. Verify `npm view @tavyno/ts-sdk@0.1.0` and install it in a clean consumer.
 
 CI uses Node 24 with npm >=11.5.1 for Trusted Publishing. Failed checks prevent

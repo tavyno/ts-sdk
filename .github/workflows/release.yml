@@ -1,7 +1,7 @@
 name: Publish @tavyno/ts-sdk
 on:
     push:
-        tags: ['v*']
+        branches: [main]
 permissions:
     contents: read
 concurrency:
@@ -16,16 +16,115 @@ jobs:
               with:
                   node-version: 24
                   cache: npm
-            - name: Verify version tag
+            - name: Verify package version is incremental
               run: |
                   node --input-type=module <<'NODE'
+                  import { spawnSync } from 'node:child_process';
                   import packageJson from './package.json' with { type: 'json' };
 
                   if (packageJson.name !== '@tavyno/ts-sdk') {
                       process.exit(1);
                   }
 
-                  if (process.env.GITHUB_REF_NAME !== `v${packageJson.version}`) {
+                  const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+                  const currentMatch = packageJson.version.match(versionPattern);
+
+                  if (!currentMatch) {
+                      console.error(`Invalid package version: ${packageJson.version}`);
+                      process.exit(1);
+                  }
+
+                  const registryResult = spawnSync('npm', ['view', packageJson.name, 'versions', '--json'], {
+                      encoding: 'utf8',
+                  });
+                  let publishedVersions = [];
+
+                  if (registryResult.status === 0) {
+                      const registryVersions = JSON.parse(registryResult.stdout);
+                      publishedVersions = Array.isArray(registryVersions)
+                          ? registryVersions
+                          : [registryVersions];
+                  } else if (!registryResult.stderr.includes('E404')) {
+                      console.error(registryResult.stderr);
+                      process.exit(registryResult.status ?? 1);
+                  }
+
+                  const compareVersions = (left, right) => {
+                      const leftMatch = left.match(versionPattern);
+                      const rightMatch = right.match(versionPattern);
+
+                      if (!leftMatch || !rightMatch) {
+                          throw new Error(`Registry returned an invalid version: ${leftMatch ? right : left}`);
+                      }
+
+                      for (const index of [1, 2, 3]) {
+                          const difference = Number(leftMatch[index]) - Number(rightMatch[index]);
+
+                          if (difference !== 0) {
+                              return difference;
+                          }
+                      }
+
+                      if (!leftMatch[4] && !rightMatch[4]) {
+                          return 0;
+                      }
+
+                      if (!leftMatch[4]) {
+                          return 1;
+                      }
+
+                      if (!rightMatch[4]) {
+                          return -1;
+                      }
+
+                      const leftIdentifiers = leftMatch[4].split('.');
+                      const rightIdentifiers = rightMatch[4].split('.');
+
+                      for (let index = 0; index < Math.max(leftIdentifiers.length, rightIdentifiers.length); index += 1) {
+                          const leftIdentifier = leftIdentifiers[index];
+                          const rightIdentifier = rightIdentifiers[index];
+
+                          if (leftIdentifier === undefined) {
+                              return -1;
+                          }
+
+                          if (rightIdentifier === undefined) {
+                              return 1;
+                          }
+
+                          if (leftIdentifier === rightIdentifier) {
+                              continue;
+                          }
+
+                          const leftIsNumeric = /^\d+$/.test(leftIdentifier);
+                          const rightIsNumeric = /^\d+$/.test(rightIdentifier);
+
+                          if (leftIsNumeric && rightIsNumeric) {
+                              return Number(leftIdentifier) - Number(rightIdentifier);
+                          }
+
+                          if (leftIsNumeric !== rightIsNumeric) {
+                              return leftIsNumeric ? -1 : 1;
+                          }
+
+                          return leftIdentifier < rightIdentifier ? -1 : 1;
+                      }
+
+                      return 0;
+                  };
+
+                  if (publishedVersions.includes(packageJson.version)) {
+                      console.error(`Version ${packageJson.version} already exists on npm.`);
+                      process.exit(1);
+                  }
+
+                  if (publishedVersions.some((version) => compareVersions(packageJson.version, version) <= 0)) {
+                      const latestVersion = publishedVersions.reduce((latest, version) =>
+                          compareVersions(version, latest) > 0 ? version : latest,
+                      );
+                      console.error(
+                          `Version ${packageJson.version} must be greater than the latest published version ${latestVersion}.`,
+                      );
                       process.exit(1);
                   }
                   NODE
