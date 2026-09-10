@@ -21,12 +21,12 @@ try {
     ]);
     writeFileSync(join(consumer, 'package.json'), '{"private":true,"type":"module"}');
     run('npm', ['install', '--ignore-scripts', '--no-audit', join(consumer, packed[0].filename)]);
-    const installed = JSON.parse(readFileSync(join(consumer, 'node_modules/@tavyno/api-client/package.json')));
+    const installed = JSON.parse(readFileSync(join(consumer, 'node_modules/@tavyno/ts-sdk/package.json')));
     assert.equal(Object.keys(installed.dependencies ?? {}).length, 0);
     writeFileSync(
         join(consumer, 'consumer.ts'),
         `
-import { createApiClient, type ApiClient, type HealthCheckResult } from '@tavyno/api-client';
+import { createApiClient, type ApiClient, type HealthCheckResult } from '@tavyno/ts-sdk';
 const client: ApiClient = createApiClient('https://example.com');
 createApiClient('https://example.com', { getAccessToken: async () => 'token' });
 // @ts-expect-error Raw tokens are not accepted because they become stale after refresh.
@@ -76,7 +76,7 @@ client.users();
         '-e',
         `
 import assert from 'node:assert/strict';
-import { createApiClient } from '@tavyno/api-client';
+import { createApiClient } from '@tavyno/ts-sdk';
 const result = await createApiClient('https://example.com', {
   fetcher: async () => Response.json({ status: 'ok', db: 'ok' })
 }).healthCheck();

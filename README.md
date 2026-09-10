@@ -1,4 +1,4 @@
-# @tavyno/api-client
+# @tavyno/ts-sdk
 
 Public TypeScript OAuth and API client for the Tavyno REST API. ESM with
 self-contained declarations and a Web Fetch API transport; no runtime dependencies or backend
@@ -6,7 +6,7 @@ repository access required. Web and React Native/Expo consumers supply a runtime
 with fetch, URL, and AbortController (or compatible polyfills).
 
 ```ts
-import { createApiClient } from '@tavyno/api-client';
+import { createApiClient } from '@tavyno/ts-sdk';
 
 const api = createApiClient('https://your-api.example.com');
 const controller = new AbortController();
@@ -58,12 +58,12 @@ Until the first npm release, the web repository uses a checked-in tarball under
 npm run check && npm run test:package
 npm pack --pack-destination ../web/vendor
 cd ../web
-npm install ./vendor/tavyno-api-client-0.1.0.tgz
+npm install ./vendor/tavyno-ts-sdk-0.1.0.tgz
 npm test && npm run typecheck && npm run lint && npm run build
 ```
 
 After publishing, replace the web file dependency with the released registry
-version: `npm install @tavyno/api-client@0.1.0`. No publishing has been performed
+version: `npm install @tavyno/ts-sdk@0.1.0`. No publishing has been performed
 as part of this initial scaffold.
 
 ## Versioning and release
@@ -74,8 +74,8 @@ major version (during 0.x, communicate breaking changes with a minor version).
 1. Merge a validated version/lockfile update, e.g. `npm version patch --no-git-tag-version`.
 2. Configure a GitHub environment named `npm` with required reviewers and tag
    restrictions. Protect release tags and main in repository settings.
-3. Configure npm Trusted Publishing for `@tavyno/api-client`: GitHub organization
-   `Tavyno`, repository `ts-client`, workflow `release.yml`, environment `npm`,
+3. Configure npm Trusted Publishing for `@tavyno/ts-sdk`: GitHub organization
+   `Tavyno`, repository `sdk`, workflow `release.yml`, environment `npm`,
    with publishing allowed. This requires npm organization/package permissions.
    For a new package, an owner may need to bootstrap its first publication before
    its trusted-publisher settings are available. Never commit a token.
@@ -83,7 +83,7 @@ major version (during 0.x, communicate breaking changes with a minor version).
 5. `release.yml` validates the tag, runs checks and isolated package tests, then
    waits for the environment approval. The publish job repeats validation before
    `npm publish --access public --provenance` using OIDC.
-6. Verify `npm view @tavyno/api-client@0.1.0` and install it in a clean consumer.
+6. Verify `npm view @tavyno/ts-sdk@0.1.0` and install it in a clean consumer.
 
 CI uses Node 24 with npm >=11.5.1 for Trusted Publishing. Failed checks prevent
 publication. Workflow files do not themselves configure npm trust, repository

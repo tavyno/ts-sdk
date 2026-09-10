@@ -1,4 +1,4 @@
-# `@tavyno/api-client` rules
+# `@tavyno/ts-sdk` rules
 
 Read the shared rules first:
 
