@@ -93,3 +93,6 @@ export function createApiClient(
     },
   };
 }
+
+export { createOAuthClient, readLoginTransaction, readOAuthTokens, OAuthError } from './oauth.js';
+export type { OAuthConfig, OAuthTokens, LoginTransaction } from './oauth.js';
