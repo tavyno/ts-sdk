@@ -103,3 +103,5 @@ Never retry automatically without an explicit, tested retry policy.
 - Link PRs to the relevant issue URLs, include verification evidence, and leave parent issues open until all required subissues and aggregate acceptance criteria are verified.
 
 - Commit each completed, verified sub-feature separately. Keep commits small and cohesive; do not bundle an entire issue into one implementation commit.
+
+- The shared client owns provider-neutral OAuth/PKCE, token exchange/refresh and Tavyno session/API calls. Keep provider-specific SDKs out. Hosts own navigation and secure storage and must supply the required standard Web APIs on mobile runtimes.
