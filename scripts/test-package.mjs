@@ -9,7 +9,7 @@ const consumer = mkdtempSync(join(tmpdir(), 'tavyno-consumer-'));
 const run = (command, args, cwd = consumer) => execFileSync(command, args, { cwd, stdio: 'pipe' });
 try {
   const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', consumer], root));
-  assert.deepEqual(packed[0].files.map(file => file.path).sort(), ['README.md', 'THIRD_PARTY_NOTICES', 'dist/index.d.ts', 'dist/index.js', 'dist/oauth.d.ts', 'package.json']);
+  assert.deepEqual(packed[0].files.map(file => file.path).sort(), ['README.md', 'THIRD_PARTY_NOTICES', 'dist/calendar.d.ts', 'dist/index.d.ts', 'dist/index.js', 'dist/oauth.d.ts', 'package.json']);
   writeFileSync(join(consumer, 'package.json'), '{"private":true,"type":"module"}');
   run('npm', ['install', '--ignore-scripts', '--no-audit', join(consumer, packed[0].filename)]);
   const installed = JSON.parse(readFileSync(join(consumer, 'node_modules/@tavyno/api-client/package.json')));
@@ -20,7 +20,7 @@ const client: ApiClient = createApiClient('https://example.com');
 const result: HealthCheckResult = await client.healthCheck();
 if (result.status === 200) { const healthy: 'ok' = result.data.db; void healthy; }
 else { const unhealthy: 'error' = result.data.db; void unhealthy; }
-// @ts-expect-error Only health is public.
+// @ts-expect-error No arbitrary user-listing API is exposed.
 client.users();
 `);
   for (const [name, module, moduleResolution] of [['next', 'ESNext', 'Bundler'], ['expo', 'Preserve', 'Bundler'], ['node', 'NodeNext', 'NodeNext']]) {

@@ -118,3 +118,37 @@ test('session and identity methods send JWTs and return only internal user ident
   assert.deepEqual(await client.me(), { id: 'internal-user' });
   assert.deepEqual(calls, [['https://api.example.com/session', 'POST'], ['https://api.example.com/me', 'GET']]);
 });
+
+test('calendar connection requests use provider-neutral contracts and caller JWT', async () => {
+  const calls = [];
+  const client = createApiClient('https://api.example.com', {
+    jwt: 'caller.jwt',
+    fetcher: async (url, init) => {
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer caller.jwt');
+      calls.push([String(url), init.method]);
+      return Response.json([{ id: 'c', provider: 'google', status: 'connected', credentials: 'secret' }]);
+    },
+  });
+  assert.deepEqual(await client.calendarConnections(), [{ id: 'c', provider: 'google', status: 'connected' }]);
+  assert.deepEqual(calls, [['https://api.example.com/calendar-connections', 'GET']]);
+});
+
+for (const [method, args, suffix, verb, data] of [
+  ['authorizeCalendar', [], '/calendar-connections/google/authorize', 'POST', { authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth?state=test' }],
+  ['completeCalendarAuthorization', [{ state: 'state', code: 'code' }], '/calendar-connections/google/complete', 'POST', { id: 'connection' }],
+  ['connectionCalendars', ['connection'], '/calendar-connections/connection/calendars', 'GET', [{ id: 'calendar', name: 'Calendar', selected: true, syncStatus: 'idle', lastSyncedAt: null }]],
+  ['refreshConnectionCalendars', ['connection'], '/calendar-connections/connection/refresh', 'POST', []],
+  ['selectExternalCalendar', ['calendar', true], '/external-calendars/calendar', 'PATCH', { id: 'calendar', selected: true }],
+  ['syncExternalCalendar', ['calendar'], '/external-calendars/calendar/sync', 'POST', { status: 'synced' }],
+  ['disconnectCalendar', ['connection'], '/calendar-connections/connection?retention=delete', 'DELETE', { disconnected: true }],
+]) {
+  test(`${method} preserves its wire contract and JWT`, async () => {
+    const client = createApiClient('https://api.example.com', { jwt: 'jwt', fetcher: async (url, init) => {
+      assert.equal(String(url), `https://api.example.com${suffix}`);
+      assert.equal(init.method, verb);
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer jwt');
+      return Response.json(data);
+    } });
+    assert.deepEqual(await client[method](...args), data);
+  });
+}
