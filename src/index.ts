@@ -1,3 +1,8 @@
+import { createCalendarClient } from './calendar.js';
+import type { CalendarClient } from './calendar.js';
+export { ApiRequestError } from './calendar.js';
+export type { CalendarConnection, ExternalCalendar } from './calendar.js';
+
 import { treaty } from "@elysia/eden";
 import type { Elysia } from "elysia";
 
@@ -5,7 +10,7 @@ export type HealthCheckResult =
   | { status: 200; data: { status: "ok"; db: "ok" } }
   | { status: 503; data: { status: "error"; db: "error" } };
 
-export interface ApiClient {
+export interface ApiClient extends CalendarClient {
   establishSession(options?: { signal?: AbortSignal }): Promise<{ id: string }>;
   me(options?: { signal?: AbortSignal }): Promise<{ id: string }>;
   healthCheck(options?: { signal?: AbortSignal }): Promise<HealthCheckResult>;
@@ -68,6 +73,7 @@ export function createApiClient(
     parseDate: false,
   });
   return {
+    ...createCalendarClient(url.href, options),
     async establishSession({ signal } = {}) {
       return readIdentity(await api.session.post({}, { fetch: { signal, cache: 'no-store' } }));
     },
