@@ -92,3 +92,14 @@ Never retry automatically without an explicit, tested retry policy.
 - Do not publish, push tags, or change registry/account configuration unless asked.
 - Keep changes scoped; never claim registry installation or release success until
   it has actually been verified.
+
+
+## Issue branches and pull requests
+
+- Create a branch linked with `gh issue develop` for every issue being implemented, including subissues.
+- Cross-repository issues need linked branches in each affected repository.
+- Create subissue branches from the parent issue branch. Merge each completed subissue branch into its parent branch before opening the parent PR to `main`.
+- Use distinct names such as `issue-2-auth-calendar` (parent) and `issue-2/authentication` (child); Git cannot store both a branch and nested refs with the same prefix.
+- Link PRs to the relevant issue URLs, include verification evidence, and leave parent issues open until all required subissues and aggregate acceptance criteria are verified.
+
+- Commit each completed, verified sub-feature separately. Keep commits small and cohesive; do not bundle an entire issue into one implementation commit.
