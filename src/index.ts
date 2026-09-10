@@ -29,7 +29,7 @@ type HealthApp = Elysia & {
 
 export function createApiClient(
   baseUrl: string,
-  options: { fetcher?: typeof fetch } = {},
+  options: { fetcher?: typeof fetch; jwt?: string } = {},
 ): ApiClient {
   let url: URL;
   try {
@@ -42,6 +42,7 @@ export function createApiClient(
   }
   const api = treaty<HealthApp>(url.href.replace(/\/+$/, ''), {
     fetcher: options.fetcher,
+    headers: options.jwt ? { Authorization: `Bearer ${options.jwt}` } : {},
     parseDate: false,
   });
   return {

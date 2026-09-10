@@ -81,3 +81,25 @@ test('preserves a custom cancellation reason', async () => {
   });
   await assert.rejects(client.healthCheck({ signal: controller.signal }), reason => reason === controller.signal.reason);
 });
+
+
+test('attaches the caller JWT to public requests as well as protected requests', async () => {
+  const client = createApiClient('https://api.example.com', {
+    jwt: 'caller.jwt.token',
+    fetcher: async (_url, init) => {
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer caller.jwt.token');
+      return Response.json({ status: 'ok', db: 'ok' });
+    },
+  });
+  await client.healthCheck();
+});
+
+test('allows anonymous public requests without inventing a token', async () => {
+  const client = createApiClient('https://api.example.com', {
+    fetcher: async (_url, init) => {
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), null);
+      return Response.json({ status: 'ok', db: 'ok' });
+    },
+  });
+  await client.healthCheck();
+});

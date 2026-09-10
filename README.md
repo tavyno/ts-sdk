@@ -90,3 +90,13 @@ publication. Workflow files do not themselves configure npm trust, repository
 protection, or environment reviewers; maintainers must configure those settings.
 See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and
 [Eden configuration](https://elysiajs.com/eden/treaty/config).
+
+Pass an access JWT supplied by your authentication layer:
+
+```ts
+const client = createApiClient(apiUrl, { jwt: accessToken });
+await client.healthCheck(); // Includes Authorization: Bearer <JWT>, even on public routes.
+```
+
+Omit `jwt` for anonymous public requests. Create a new client when the token changes.
+The client does not depend on Auth0, store sessions, acquire tokens, or refresh tokens.
