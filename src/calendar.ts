@@ -1,43 +1,130 @@
 import { createApiRequest } from './http.js';
 import type { ClientOptions } from './http.js';
 
+/**
+ * Represents an external calendar provider connection owned by the current user.
+ */
 export interface CalendarConnection {
     id: string;
+
+    /** Identifies the external calendar provider. */
     provider: string;
+
+    /** Indicates whether the connection can be used or must be authorized again. */
     status: 'connected' | 'reconnect_required';
 }
 
+/**
+ * Represents an external calendar available through a calendar connection.
+ */
 export interface ExternalCalendar {
     id: string;
     name: string;
+
+    /** Determines whether the calendar participates in Tavyno synchronization. */
     selected: boolean;
+
+    /** Describes the current synchronization state. */
     syncStatus: 'idle' | 'syncing' | 'synced' | 'failed';
+
+    /** Timestamp reported for the most recent synchronization, or `null` if none is available. */
     lastSyncedAt: string | null;
 }
 
+/**
+ * Provides operations for connecting and synchronizing external calendars.
+ */
 export interface CalendarClient {
+    /**
+     * Retrieves the current user's external calendar connections.
+     *
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     calendarConnections(options?: RequestOptions): Promise<CalendarConnection[]>;
+
+    /**
+     * Starts authorization for a Google Calendar connection.
+     *
+     * The host application is responsible for navigating to the returned URL.
+     *
+     * @returns A validated Google authorization URL.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     authorizeCalendar(options?: RequestOptions): Promise<{ authorizationUrl: string }>;
+
+    /**
+     * Completes authorization for a Google Calendar connection.
+     *
+     * @param input - Provider callback state and either an authorization code or denial indicator.
+     * @returns The identifier of the resulting calendar connection.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     completeCalendarAuthorization(
         input: { state: string; code?: string; denied?: boolean },
         options?: RequestOptions,
     ): Promise<{ id: string }>;
+
+    /**
+     * Retrieves the external calendars available through a connection.
+     *
+     * @param id - Calendar connection identifier.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     connectionCalendars(id: string, options?: RequestOptions): Promise<ExternalCalendar[]>;
+
+    /**
+     * Refreshes and returns the external calendars available through a connection.
+     *
+     * @param id - Calendar connection identifier.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     refreshConnectionCalendars(id: string, options?: RequestOptions): Promise<ExternalCalendar[]>;
+
+    /**
+     * Changes whether an external calendar participates in synchronization.
+     *
+     * @param id - External calendar identifier.
+     * @param selected - Whether to include the calendar in synchronization.
+     * @returns The external calendar identifier and its resulting selection state.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     selectExternalCalendar(
         id: string,
         selected: boolean,
         options?: RequestOptions,
     ): Promise<{ id: string; selected: boolean }>;
+
+    /**
+     * Requests synchronization of an external calendar.
+     *
+     * @param id - External calendar identifier.
+     * @returns Whether synchronization is in progress or already completed.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     syncExternalCalendar(id: string, options?: RequestOptions): Promise<{ status: 'syncing' | 'synced' }>;
+
+    /**
+     * Disconnects an external calendar provider and deletes its retained connection data.
+     *
+     * @param id - Calendar connection identifier.
+     * @throws {@link ApiRequestError} If the API rejects the request.
+     */
     disconnectCalendar(id: string, options?: RequestOptions): Promise<{ disconnected: true }>;
 }
 
 type RequestOptions = { signal?: AbortSignal };
 
+/**
+ * Represents a rejected Tavyno calendar API request.
+ *
+ * Exposes the HTTP status and a stable API error code when recognized. Unknown
+ * error responses use the `REQUEST_FAILED` code.
+ */
 export class ApiRequestError extends Error {
     constructor(
+        /** HTTP status code returned for the rejected request. */
         public status: number,
+        /** API error code, or `REQUEST_FAILED` when no recognized code is available. */
         public code: string,
     ) {
         super(`API request failed (${status}: ${code})`);
@@ -128,6 +215,13 @@ function identity(value: unknown) {
     return { id: value.id };
 }
 
+/**
+ * Creates a client for Tavyno calendar operations.
+ *
+ * @param baseUrl - API base URL used for calendar requests.
+ * @param options - Transport and authentication configuration.
+ * @returns A configured {@link CalendarClient}.
+ */
 export function createCalendarClient(
     baseUrl: string,
     options: ClientOptions,

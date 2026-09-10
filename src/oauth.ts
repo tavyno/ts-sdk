@@ -1,13 +1,31 @@
 import * as oauth from 'oauth4webapi';
 
+/**
+ * Configures the runtime-neutral OAuth/OIDC client.
+ */
 export interface OAuthConfig {
+    /** HTTPS issuer URL used for authorization-server discovery. */
     issuer: string;
+
+    /** Public OAuth client identifier. */
     clientId: string;
+
+    /** Optional audience included in authorization requests. */
     audience?: string;
+
+    /** Requested scopes, or the client's default OpenID scopes when omitted. */
     scope?: string;
+
+    /** Fetch implementation used for discovery, token, and signature-validation requests. */
     fetcher?: typeof fetch;
 }
 
+/**
+ * Represents the transient PKCE state required to complete a login.
+ *
+ * Hosts must persist this value securely between starting authorization and
+ * processing the callback.
+ */
 export interface LoginTransaction {
     state: string;
     nonce: string;
@@ -15,17 +33,30 @@ export interface LoginTransaction {
     redirectUri: string;
     issuer: string;
     clientId: string;
+    /** Absolute expiration time expressed as Unix time in milliseconds. */
     expiresAt: number;
 }
 
+/**
+ * Represents OAuth tokens obtained for an authenticated session.
+ */
 export interface OAuthTokens {
     accessToken: string;
     refreshToken?: string;
     idToken?: string;
+    /** Absolute access-token expiration time expressed as Unix time in milliseconds. */
     expiresAt: number;
 }
 
+/**
+ * Represents a failure during an OAuth login, transaction validation, or token refresh.
+ */
 export class OAuthError extends Error {
+    /**
+     * Creates an OAuth error with a caller-actionable failure category.
+     *
+     * @param code - Stage and category of the OAuth failure.
+     */
     constructor(public code: 'LOGIN_FAILED' | 'INVALID_TRANSACTION' | 'REFRESH_FAILED') {
         super(code);
     }
@@ -35,6 +66,15 @@ function object(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
 }
 
+/**
+ * Validates and normalizes a persisted login transaction.
+ *
+ * Unknown properties are discarded.
+ *
+ * @param value - Untrusted persisted value to validate.
+ * @returns A validated {@link LoginTransaction}.
+ * @throws {@link OAuthError} With `INVALID_TRANSACTION` when the value is malformed.
+ */
 export function readLoginTransaction(value: unknown): LoginTransaction {
     if (
         !object(value) ||
@@ -60,6 +100,15 @@ export function readLoginTransaction(value: unknown): LoginTransaction {
     };
 }
 
+/**
+ * Validates and normalizes persisted OAuth tokens.
+ *
+ * Unknown properties and empty optional tokens are discarded.
+ *
+ * @param value - Untrusted persisted value to validate.
+ * @returns Validated {@link OAuthTokens}.
+ * @throws {@link OAuthError} With `LOGIN_FAILED` when the value is malformed.
+ */
 export function readOAuthTokens(value: unknown): OAuthTokens {
     if (
         !object(value) ||
@@ -104,7 +153,16 @@ function redirectUrl(value: string) {
     return url;
 }
 
-/** Runtime-neutral OAuth/OIDC. Hosts own navigation and secure persistence; Web Crypto is required. */
+/**
+ * Creates a runtime-neutral OAuth/OIDC client for a public client using PKCE.
+ *
+ * Hosts own navigation and secure persistence. The runtime must provide Web
+ * Crypto, Fetch, URL, and AbortSignal APIs. Authorization-server metadata is
+ * discovered on demand and reused by subsequent operations.
+ *
+ * @param config - OAuth issuer, client, scope, and transport configuration.
+ * @returns Operations for login, token refresh, and logout URL creation.
+ */
 export function createOAuthClient(config: OAuthConfig) {
     const issuer = new URL(config.issuer);
 
@@ -132,6 +190,15 @@ export function createOAuthClient(config: OAuthConfig) {
     }
 
     return {
+        /**
+         * Creates an authorization URL and the PKCE transaction needed to complete login.
+         *
+         * Each call creates new state, nonce, and verifier values. The host must persist
+         * the transaction and navigate the user to the authorization URL.
+         *
+         * @param input - Redirect URI and optional additional authorization parameters.
+         * @throws {@link OAuthError} With `LOGIN_FAILED` if login cannot be started.
+         */
         async createLogin(input: { redirectUri: string; parameters?: Record<string, string> }) {
             try {
                 const authorizationServer = await discover();
@@ -173,6 +240,17 @@ export function createOAuthClient(config: OAuthConfig) {
                 throw new OAuthError('LOGIN_FAILED');
             }
         },
+        /**
+         * Validates an authorization callback and exchanges its code for tokens.
+         *
+         * The saved transaction must be unexpired and match the configured issuer,
+         * client, redirect location, state, and nonce.
+         *
+         * @param callbackUrl - Full URL received from the authorization redirect.
+         * @param savedTransaction - Transaction returned by `createLogin` for this attempt.
+         * @returns Tokens for the authenticated session.
+         * @throws {@link OAuthError} With `INVALID_TRANSACTION` if validation or exchange fails.
+         */
         async completeLogin(callbackUrl: string, savedTransaction: LoginTransaction): Promise<OAuthTokens> {
             try {
                 const transaction = readLoginTransaction(savedTransaction);
@@ -217,6 +295,15 @@ export function createOAuthClient(config: OAuthConfig) {
                 throw new OAuthError('INVALID_TRANSACTION');
             }
         },
+        /**
+         * Refreshes an authenticated session using its refresh token.
+         *
+         * Existing refresh and ID tokens are retained when the provider does not rotate them.
+         *
+         * @param previous - Current tokens, including a refresh token.
+         * @returns Refreshed tokens with a newly calculated expiration time.
+         * @throws {@link OAuthError} With `REFRESH_FAILED` if refresh cannot be completed.
+         */
         async refresh(previous: OAuthTokens): Promise<OAuthTokens> {
             try {
                 if (!previous.refreshToken) {
@@ -242,6 +329,15 @@ export function createOAuthClient(config: OAuthConfig) {
                 throw new OAuthError('REFRESH_FAILED');
             }
         },
+        /**
+         * Creates a provider logout URL for an authenticated session.
+         *
+         * Returns the normalized `returnTo` URL when the provider does not advertise
+         * a logout endpoint. The host is responsible for navigation.
+         *
+         * @param input - Post-logout destination and optional ID-token hint.
+         * @returns The provider logout URL or the normalized post-logout destination.
+         */
         async createLogoutUrl(input: { returnTo: string; idToken?: string }) {
             const returnTo = redirectUrl(input.returnTo).href;
 
