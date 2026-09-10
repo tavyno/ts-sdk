@@ -5,7 +5,7 @@ consumed by web and React Native/Expo apps. It is not a backend application.
 
 ## Scope and dependency direction
 
-- Keep today's surface limited to `GET /health`; add endpoints only when requested.
+- Keep the surface scoped to health, identity/session, provider-neutral OAuth/PKCE, and optional calendar connection/sync contracts; add other endpoints only when requested.
 - Consumers depend on this package. `rest-api` must never depend on this package.
 - The REST API owns its HTTP contract. Check its routes and tests before changing
   client methods; synchronize the public wire contract deliberately.

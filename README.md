@@ -1,6 +1,6 @@
 # @tavyno/api-client
 
-Public, health-check-only TypeScript wrapper for the Tavyno REST API. ESM with
+Public TypeScript OAuth and API client for the Tavyno REST API. ESM with
 self-contained declarations and bundled Eden; no runtime dependencies or backend
 repository access required. Web and React Native/Expo consumers supply a runtime
 with fetch, URL, and AbortController (or compatible polyfills).
@@ -23,7 +23,7 @@ try {
 
 `healthCheck()` sends uncached `GET /health`. A base path is preserved and trailing
 slashes are removed. Supply an absolute HTTP(S) URL without credentials, query,
-or fragment. There is no environment lookup, authentication, retry, or default
+or fragment. There is no environment lookup, implicit retry, or default
 timeout; callers own cancellation and deadlines. Network errors reject; unexpected
 HTTP statuses and malformed health responses reject with a sanitized message.
 Documented 503 responses resolve as a typed unhealthy result.
@@ -99,7 +99,7 @@ await client.healthCheck(); // Includes Authorization: Bearer <JWT>, even on pub
 ```
 
 Omit `jwt` for anonymous public requests. Create a new client when the token changes.
-The client does not depend on Auth0, store sessions, acquire tokens, or refresh tokens.
+The API client accepts a JWT. The separate provider-neutral OAuth client acquires and refreshes tokens; neither owns runtime storage or depends on Auth0.
 
 ## Portable OAuth / PKCE
 
@@ -123,3 +123,14 @@ AbortController/AbortSignal, TextEncoder, and Web Crypto APIs. React Native host
 must supply compatible Web API/Web Crypto polyfills where their runtime lacks them;
 no Node or DOM module is imported. Package checks cover Next/Expo typings and browser/mobile
 bundling; real-device OAuth still requires testing with the chosen mobile host.
+
+
+## Calendar integration methods
+
+Use `calendarConnections`, `authorizeCalendar`, `completeCalendarAuthorization`,
+`connectionCalendars`, `refreshConnectionCalendars`, `selectExternalCalendar`,
+`syncExternalCalendar`, and `disconnectCalendar` for the optional integration.
+Every method uses the configured JWT. Sync processes one provider page per request;
+continue while the returned status is `syncing`, and pass an AbortSignal to pause.
+Disconnect deletes the integration's cached imports (`retention=delete`).
+Provider credentials are never included in client contracts.

@@ -20,7 +20,7 @@ const client: ApiClient = createApiClient('https://example.com');
 const result: HealthCheckResult = await client.healthCheck();
 if (result.status === 200) { const healthy: 'ok' = result.data.db; void healthy; }
 else { const unhealthy: 'error' = result.data.db; void unhealthy; }
-// @ts-expect-error Only health is public.
+// @ts-expect-error No arbitrary user-listing API is exposed.
 client.users();
 `);
   for (const [name, module, moduleResolution] of [['next', 'ESNext', 'Bundler'], ['expo', 'Preserve', 'Bundler'], ['node', 'NodeNext', 'NodeNext']]) {
