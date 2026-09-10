@@ -1,6 +1,6 @@
 {
     "name": "@tavyno/ts-sdk",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Typed Tavyno REST API client for web and React Native",
     "type": "module",
     "main": "./dist/index.js",
