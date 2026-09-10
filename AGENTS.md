@@ -1,94 +1,28 @@
-# Engineering rules for @tavyno/api-client
+# `@tavyno/api-client` rules
 
-This repository is the public TypeScript wrapper for Tavyno's REST API. It is
-consumed by web and React Native/Expo apps. It is not a backend application.
+Read the shared rules first:
 
-## Scope and dependency direction
+- [Shared principles](../ai-rules/principles.md)
+- [Code conventions](../ai-rules/code-style.md)
+- [Testing](../ai-rules/testing.md)
+- [Safety](../ai-rules/safety.md)
+- [Workflow](../ai-rules/workflow.md)
+- [Package rules](ai-rules/package.md)
 
-- Keep today's surface limited to `GET /health`; add endpoints only when requested.
-- Consumers depend on this package. `rest-api` must never depend on this package.
-- The REST API owns its HTTP contract. Check its routes and tests before changing
-  client methods; synchronize the public wire contract deliberately.
-- Use Eden internally with an explicit Elysia route type. Public declarations must
-  not import private repository paths, Cloudflare bindings, database code, or
-  backend implementation types. Keep the package independently installable.
-- Use Web Standard APIs. No Node, Bun, filesystem, browser DOM, React, Next.js,
-  or Worker-specific runtime imports in the client.
-- Do not read environment variables or choose deployment URLs inside the SDK.
-  Callers supply configuration. Never embed credentials or log response bodies.
+Before behavior changes or bug fixes, inspect the public contract, implementation, tests, dependency versions, and relevant scripts. Run `npm run check` and `npm run test:package` before completion.
 
-## Mandatory test-driven development
+Preserve cancellation and distinguish documented HTTP outcomes, transport failures, and invalid responses. Never add automatic retries without an explicit tested policy.
 
-For every behavior change or bug fix:
+Use npm and commit generated lockfile changes; do not edit lockfiles by hand. Do not claim registry installation or release success unless verified.
 
-1. Inspect the current public contract, implementation, tests, and dependency versions.
-2. Write the smallest test of observable behavior first.
-3. Run it and verify it fails for the missing behavior, not broken setup/imports.
-4. Implement the minimum change to pass.
-5. Refactor only where the changed code needs it, keeping tests green.
-6. Run `npm run check` and `npm run test:package` before completion.
-7. Review the diff and report checks that could not run.
+This repo is API wrapper so this must not handle UI logic and must not be used in `rest-api`
 
-Use Node's test runner and fake the fetch boundary; no live API, staging database,
-clock sleeps, or production infrastructure in normal tests. Test URL/method,
-response contracts, HTTP failures, malformed payloads, and cancellation/network
-failures. Test through public methods, not private helpers or call counts.
-Packaging tests must install the tarball in an isolated consumer and verify ESM,
-public declaration resolution, and web/mobile bundle compatibility.
-Never weaken tests or types to pass a check. New tooling may be scaffolded before
-behavior tests, but production behavior must follow red → green → refactor.
+# TypeScript client rules
 
-## Clean code and pragmatic OOP/SOLID
-
-Prefer small functions, explicit inputs, guard clauses, descriptive domain names,
-and plain typed objects. Use strict TypeScript; narrow `unknown` at external
-boundaries rather than asserting untrusted JSON. No `any` or broad suppressions.
-Represent mutually exclusive outcomes with discriminated unions.
-
-Classes are optional. Use them when identity, state, configuration, or lifecycle
-makes the API clearer; a configured function closure is sufficient for this SDK.
-Do not introduce classes purely for namespacing or static methods.
-
-Apply SOLID when it removes concrete complexity:
-
-- Single responsibility: keep endpoint behavior cohesive; isolate transport only
-  when multiple endpoints actually need the same policy.
-- Open/closed: prefer composition for real extension needs, not speculative hooks.
-- Liskov substitution: custom fetch implementations must honor fetch semantics,
-  including response and rejection behavior.
-- Interface segregation: expose focused client contracts; do not require callers
-  to implement unrelated capabilities.
-- Dependency inversion: inject fetch at the network boundary for deterministic
-  tests; no DI container, abstract base client, repository, or service hierarchy.
-
-Avoid generic request frameworks, automatic retries, authentication systems,
-caches, global state, and feature flags unless the current task requires them.
-Do not abstract similar code until it represents the same repeated concept.
-
-## Organization and error behavior
-
-Start flat. Split by endpoint or transport responsibility as the package grows.
-Review cohesion near 300 lines; split files above 500 lines when they mix concerns.
-Do not create dumping-ground helpers or one-file-per-trivial-function structures.
-Keep exports intentional and document public behavior and compatibility changes.
-
-Treat the network as unreliable. Distinguish documented HTTP outcomes from
-transport failures and invalid responses. Preserve cancellation; do not swallow
-errors. Consumers must bound request duration and handle rejected promises.
-Never retry automatically without an explicit, tested retry policy.
-
-## Packaging and releases
-
-- Use npm and commit its generated lockfile; do not edit lockfiles by hand.
-- Build distributable ESM and self-contained declarations. Publish only intended
-  artifacts; verify the packed package without sibling repositories.
-- Preserve web and React Native runtime compatibility; bundle-time checks are not
-  a substitute for device testing when adding platform-sensitive behavior.
-- Add dependencies only for a real requirement; inspect installed types/source and
-  official version-matched documentation for uncertain library behavior.
-- Run validation before release. Version tags must match package.json.
-- Publish through the approved GitHub release workflow using npm OIDC Trusted
-  Publishing. Never commit publishing credentials or bypass failed checks.
-- Do not publish, push tags, or change registry/account configuration unless asked.
-- Keep changes scoped; never claim registry installation or release success until
-  it has actually been verified.
+- This package is a public, independently installable wrapper for Tavyno's REST API, consumed by web and React Native/Expo apps. Keep its scope limited to requested contracts.
+- `rest-api` must never depend on this package. Check backend routes and tests before changing client methods, and synchronize wire contracts deliberately.
+- Use a small Web Fetch API transport and explicit public wire contracts; do not couple this package to a server framework or its route types.
+- Use Web Standard APIs only: no Node, Bun, filesystem, DOM, React, Next.js, or Worker-specific imports. Callers supply configuration and deployment URLs; the SDK does not read environment variables or embed credentials.
+- Use Node's test runner with fake fetch boundaries. Packaging tests must verify the tarball, ESM, declarations, and web/mobile compatibility.
+- Publish only through the approved GitHub release workflow using npm OIDC Trusted Publishing. Do not publish, push tags, or change registry/account configuration unless asked.
+- Keep provider-specific SDKs, navigation, React hooks, token storage, and secure storage in hosts; the shared client owns provider-neutral OAuth/PKCE and API/session calls.

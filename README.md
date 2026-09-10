@@ -1,7 +1,7 @@
 # @tavyno/api-client
 
-Public, health-check-only TypeScript wrapper for the Tavyno REST API. ESM with
-self-contained declarations and bundled Eden; no runtime dependencies or backend
+Public TypeScript OAuth and API client for the Tavyno REST API. ESM with
+self-contained declarations and a Web Fetch API transport; no runtime dependencies or backend
 repository access required. Web and React Native/Expo consumers supply a runtime
 with fetch, URL, and AbortController (or compatible polyfills).
 
@@ -12,25 +12,25 @@ const api = createApiClient('https://your-api.example.com');
 const controller = new AbortController();
 const timeout = setTimeout(() => controller.abort(), 10_000);
 try {
-  const result = await api.healthCheck({ signal: controller.signal });
-  // 200: { status: 'ok', db: 'ok' }
-  // 503: { status: 'error', db: 'error' }
-  console.log(result.status, result.data);
+    const result = await api.healthCheck({ signal: controller.signal });
+    // 200: { status: 'ok', db: 'ok' }
+    // 503: { status: 'error', db: 'error' }
+    console.log(result.status, result.data);
 } finally {
-  clearTimeout(timeout);
+    clearTimeout(timeout);
 }
 ```
 
 `healthCheck()` sends uncached `GET /health`. A base path is preserved and trailing
 slashes are removed. Supply an absolute HTTP(S) URL without credentials, query,
-or fragment. There is no environment lookup, authentication, retry, or default
+or fragment. There is no environment lookup, implicit retry, or default
 timeout; callers own cancellation and deadlines. Network errors reject; unexpected
 HTTP statuses and malformed health responses reject with a sanitized message.
 Documented 503 responses resolve as a typed unhealthy result.
 
 For tests or a custom fetch implementation, pass `{ fetcher }` as the factory's
-second argument. `ApiClient` and `HealthCheckResult` are public types. Eden and the
-Elysia route model remain internal. The wire model follows `rest-api`'s `/health`
+second argument. `ApiClient` and `HealthCheckResult` are public types. The client is
+independent of the server framework. Its wire model follows `rest-api`'s `/health`
 route and tests; update them together when that server contract changes. The
 backend never imports this package.
 
@@ -88,5 +88,49 @@ major version (during 0.x, communicate breaking changes with a minor version).
 CI uses Node 24 with npm >=11.5.1 for Trusted Publishing. Failed checks prevent
 publication. Workflow files do not themselves configure npm trust, repository
 protection, or environment reviewers; maintainers must configure those settings.
-See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and
-[Eden configuration](https://elysiajs.com/eden/treaty/config).
+See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/).
+
+Pass a function that returns the current access token from your authentication layer:
+
+```ts
+const client = createApiClient(apiUrl, { getAccessToken: () => accessToken });
+await client.healthCheck(); // Includes Authorization: Bearer <JWT>, even on public routes.
+```
+
+The callback is evaluated before every request and may return a token synchronously or
+asynchronously, so refreshed tokens are used without recreating the client. Return `null` or
+`undefined` (or omit `getAccessToken`) for anonymous requests. The separate provider-neutral
+OAuth client acquires and refreshes tokens; neither client owns runtime storage or depends on Auth0.
+
+## Portable OAuth / PKCE
+
+`createOAuthClient({ issuer, clientId, audience })` uses standards-based OIDC discovery,
+PKCE S256, state/nonce validation, RS256 ID-token verification, public-client code
+exchange, refresh-token rotation, and RP-initiated logout. It has no Auth0 dependency.
+
+```ts
+const oauth = createOAuthClient({ issuer, clientId, audience });
+const { authorizationUrl, transaction } = await oauth.createLogin({ redirectUri });
+// Host: persist transaction securely and open authorizationUrl.
+const tokens = await oauth.completeLogin(callbackUrl, transaction);
+const user = await createApiClient(apiUrl, { getAccessToken: () => tokens.accessToken }).establishSession();
+const renewed = await oauth.refresh(tokens);
+```
+
+The host must consume the saved transaction once, persist the latest rotated tokens,
+and serialize refresh calls. Browser code owns navigation/storage; mobile code owns
+its browser session and OS secure storage. The SDK only uses standard Fetch, URL,
+AbortController/AbortSignal, TextEncoder, and Web Crypto APIs. React Native hosts
+must supply compatible Web API/Web Crypto polyfills where their runtime lacks them;
+no Node or DOM module is imported. Package checks cover Next/Expo typings and browser/mobile
+bundling; real-device OAuth still requires testing with the chosen mobile host.
+
+## Calendar integration methods
+
+Use `calendarConnections`, `authorizeCalendar`, `completeCalendarAuthorization`,
+`connectionCalendars`, `refreshConnectionCalendars`, `selectExternalCalendar`,
+`syncExternalCalendar`, and `disconnectCalendar` for the optional integration.
+Every method uses the configured JWT. Sync processes one provider page per request;
+continue while the returned status is `syncing`, and pass an AbortSignal to pause.
+Disconnect deletes the integration's cached imports (`retention=delete`).
+Provider credentials are never included in client contracts.
