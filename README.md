@@ -100,3 +100,26 @@ await client.healthCheck(); // Includes Authorization: Bearer <JWT>, even on pub
 
 Omit `jwt` for anonymous public requests. Create a new client when the token changes.
 The client does not depend on Auth0, store sessions, acquire tokens, or refresh tokens.
+
+## Portable OAuth / PKCE
+
+`createOAuthClient({ issuer, clientId, audience })` uses standards-based OIDC discovery,
+PKCE S256, state/nonce validation, RS256 ID-token verification, public-client code
+exchange, refresh-token rotation, and RP-initiated logout. It has no Auth0 dependency.
+
+```ts
+const oauth = createOAuthClient({ issuer, clientId, audience });
+const { authorizationUrl, transaction } = await oauth.createLogin({ redirectUri });
+// Host: persist transaction securely and open authorizationUrl.
+const tokens = await oauth.completeLogin(callbackUrl, transaction);
+const user = await createApiClient(apiUrl, { jwt: tokens.accessToken }).establishSession();
+const renewed = await oauth.refresh(tokens);
+```
+
+The host must consume the saved transaction once, persist the latest rotated tokens,
+and serialize refresh calls. Browser code owns navigation/storage; mobile code owns
+its browser session and OS secure storage. The SDK only uses standard Fetch, URL,
+AbortController/AbortSignal, TextEncoder, and Web Crypto APIs. React Native hosts
+must supply compatible Web API/Web Crypto polyfills where their runtime lacks them;
+no Node or DOM module is imported. Package checks cover Next/Expo typings and browser/mobile
+bundling; real-device OAuth still requires testing with the chosen mobile host.
