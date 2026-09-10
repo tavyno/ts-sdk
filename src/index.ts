@@ -6,12 +6,34 @@ export type HealthCheckResult =
   | { status: 503; data: { status: "error"; db: "error" } };
 
 export interface ApiClient {
+  establishSession(options?: { signal?: AbortSignal }): Promise<{ id: string }>;
+  me(options?: { signal?: AbortSignal }): Promise<{ id: string }>;
   healthCheck(options?: { signal?: AbortSignal }): Promise<HealthCheckResult>;
+}
+
+type IdentityRoute = {
+  body: unknown; headers: unknown; query: unknown; params: Record<never, never>;
+  response: { 200: { id: string }; 401: { error: string }; 404: { error: string } };
+};
+
+function readIdentity(result: { status: number; data: unknown; error: unknown; response?: Response }) {
+  if (!result.response && result.error && typeof result.error === 'object' && 'value' in result.error) {
+    throw result.error.value;
+  }
+  if (result.status !== 200) {
+    throw new Error(`Identity request failed (${result.status})`);
+  }
+  if (typeof result.data !== 'object' || result.data === null || !('id' in result.data) || typeof result.data.id !== 'string') {
+    throw new Error('Invalid identity response');
+  }
+  return { id: result.data.id };
 }
 
 // Public wire contract of rest-api GET /health; no Worker or database types.
 type HealthApp = Elysia & {
   "~Routes": {
+    session: { post: IdentityRoute };
+    me: { get: IdentityRoute };
     health: {
       get: {
         body: unknown;
@@ -29,7 +51,7 @@ type HealthApp = Elysia & {
 
 export function createApiClient(
   baseUrl: string,
-  options: { fetcher?: typeof fetch } = {},
+  options: { fetcher?: typeof fetch; jwt?: string } = {},
 ): ApiClient {
   let url: URL;
   try {
@@ -42,9 +64,16 @@ export function createApiClient(
   }
   const api = treaty<HealthApp>(url.href.replace(/\/+$/, ''), {
     fetcher: options.fetcher,
+    headers: options.jwt ? { Authorization: `Bearer ${options.jwt}` } : {},
     parseDate: false,
   });
   return {
+    async establishSession({ signal } = {}) {
+      return readIdentity(await api.session.post({}, { fetch: { signal, cache: 'no-store' } }));
+    },
+    async me({ signal } = {}) {
+      return readIdentity(await api.me.get({ fetch: { signal, cache: 'no-store' } }));
+    },
     async healthCheck({ signal } = {}) {
       const result = await api.health.get({ fetch: { signal, cache: "no-store" } });
       if (!result.response && result.error) throw result.error.value;

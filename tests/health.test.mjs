@@ -81,3 +81,40 @@ test('preserves a custom cancellation reason', async () => {
   });
   await assert.rejects(client.healthCheck({ signal: controller.signal }), reason => reason === controller.signal.reason);
 });
+
+
+test('attaches the caller JWT to public requests as well as protected requests', async () => {
+  const client = createApiClient('https://api.example.com', {
+    jwt: 'caller.jwt.token',
+    fetcher: async (_url, init) => {
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer caller.jwt.token');
+      return Response.json({ status: 'ok', db: 'ok' });
+    },
+  });
+  await client.healthCheck();
+});
+
+test('allows anonymous public requests without inventing a token', async () => {
+  const client = createApiClient('https://api.example.com', {
+    fetcher: async (_url, init) => {
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), null);
+      return Response.json({ status: 'ok', db: 'ok' });
+    },
+  });
+  await client.healthCheck();
+});
+
+test('session and identity methods send JWTs and return only internal user identity', async () => {
+  const calls = [];
+  const client = createApiClient('https://api.example.com', {
+    jwt: 'access.jwt.token',
+    fetcher: async (url, init) => {
+      calls.push([String(url), init.method]);
+      assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer access.jwt.token');
+      return Response.json({ id: 'internal-user', providerSecret: 'must-not-leak' });
+    },
+  });
+  assert.deepEqual(await client.establishSession(), { id: 'internal-user' });
+  assert.deepEqual(await client.me(), { id: 'internal-user' });
+  assert.deepEqual(calls, [['https://api.example.com/session', 'POST'], ['https://api.example.com/me', 'GET']]);
+});
