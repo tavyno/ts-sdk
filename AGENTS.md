@@ -15,11 +15,13 @@ Preserve cancellation and distinguish documented HTTP outcomes, transport failur
 
 Use npm and commit generated lockfile changes; do not edit lockfiles by hand. Do not claim registry installation or release success unless verified.
 
+This repo is API wrapper so this must not handle UI logic and must not be used in `rest-api`
+
 # TypeScript client rules
 
 - This package is a public, independently installable wrapper for Tavyno's REST API, consumed by web and React Native/Expo apps. Keep its scope limited to requested contracts.
 - `rest-api` must never depend on this package. Check backend routes and tests before changing client methods, and synchronize wire contracts deliberately.
-- Use Eden with an explicit Elysia route type internally, but keep public declarations free of private repository, Worker, database, and backend implementation types.
+- Use a small Web Fetch API transport and explicit public wire contracts; do not couple this package to a server framework or its route types.
 - Use Web Standard APIs only: no Node, Bun, filesystem, DOM, React, Next.js, or Worker-specific imports. Callers supply configuration and deployment URLs; the SDK does not read environment variables or embed credentials.
 - Use Node's test runner with fake fetch boundaries. Packaging tests must verify the tarball, ESM, declarations, and web/mobile compatibility.
 - Publish only through the approved GitHub release workflow using npm OIDC Trusted Publishing. Do not publish, push tags, or change registry/account configuration unless asked.

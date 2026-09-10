@@ -13,6 +13,7 @@ try {
         'README.md',
         'THIRD_PARTY_NOTICES',
         'dist/calendar.d.ts',
+        'dist/http.d.ts',
         'dist/index.d.ts',
         'dist/index.js',
         'dist/oauth.d.ts',
@@ -27,6 +28,9 @@ try {
         `
 import { createApiClient, type ApiClient, type HealthCheckResult } from '@tavyno/api-client';
 const client: ApiClient = createApiClient('https://example.com');
+createApiClient('https://example.com', { getAccessToken: async () => 'token' });
+// @ts-expect-error Raw tokens are not accepted because they become stale after refresh.
+createApiClient('https://example.com', { jwt: 'token' });
 const result: HealthCheckResult = await client.healthCheck();
 if (result.status === 200) { const healthy: 'ok' = result.data.db; void healthy; }
 else { const unhealthy: 'error' = result.data.db; void unhealthy; }

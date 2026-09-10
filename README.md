@@ -1,7 +1,7 @@
 # @tavyno/api-client
 
 Public TypeScript OAuth and API client for the Tavyno REST API. ESM with
-self-contained declarations and bundled Eden; no runtime dependencies or backend
+self-contained declarations and a Web Fetch API transport; no runtime dependencies or backend
 repository access required. Web and React Native/Expo consumers supply a runtime
 with fetch, URL, and AbortController (or compatible polyfills).
 
@@ -29,8 +29,8 @@ HTTP statuses and malformed health responses reject with a sanitized message.
 Documented 503 responses resolve as a typed unhealthy result.
 
 For tests or a custom fetch implementation, pass `{ fetcher }` as the factory's
-second argument. `ApiClient` and `HealthCheckResult` are public types. Eden and the
-Elysia route model remain internal. The wire model follows `rest-api`'s `/health`
+second argument. `ApiClient` and `HealthCheckResult` are public types. The client is
+independent of the server framework. Its wire model follows `rest-api`'s `/health`
 route and tests; update them together when that server contract changes. The
 backend never imports this package.
 
@@ -88,18 +88,19 @@ major version (during 0.x, communicate breaking changes with a minor version).
 CI uses Node 24 with npm >=11.5.1 for Trusted Publishing. Failed checks prevent
 publication. Workflow files do not themselves configure npm trust, repository
 protection, or environment reviewers; maintainers must configure those settings.
-See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/) and
-[Eden configuration](https://elysiajs.com/eden/treaty/config).
+See [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/).
 
-Pass an access JWT supplied by your authentication layer:
+Pass a function that returns the current access token from your authentication layer:
 
 ```ts
-const client = createApiClient(apiUrl, { jwt: accessToken });
+const client = createApiClient(apiUrl, { getAccessToken: () => accessToken });
 await client.healthCheck(); // Includes Authorization: Bearer <JWT>, even on public routes.
 ```
 
-Omit `jwt` for anonymous public requests. Create a new client when the token changes.
-The API client accepts a JWT. The separate provider-neutral OAuth client acquires and refreshes tokens; neither owns runtime storage or depends on Auth0.
+The callback is evaluated before every request and may return a token synchronously or
+asynchronously, so refreshed tokens are used without recreating the client. Return `null` or
+`undefined` (or omit `getAccessToken`) for anonymous requests. The separate provider-neutral
+OAuth client acquires and refreshes tokens; neither client owns runtime storage or depends on Auth0.
 
 ## Portable OAuth / PKCE
 
@@ -112,7 +113,7 @@ const oauth = createOAuthClient({ issuer, clientId, audience });
 const { authorizationUrl, transaction } = await oauth.createLogin({ redirectUri });
 // Host: persist transaction securely and open authorizationUrl.
 const tokens = await oauth.completeLogin(callbackUrl, transaction);
-const user = await createApiClient(apiUrl, { jwt: tokens.accessToken }).establishSession();
+const user = await createApiClient(apiUrl, { getAccessToken: () => tokens.accessToken }).establishSession();
 const renewed = await oauth.refresh(tokens);
 ```
 

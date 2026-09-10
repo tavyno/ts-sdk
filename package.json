@@ -35,9 +35,7 @@
         "test:package": "npm run build && node scripts/test-package.mjs"
     },
     "devDependencies": {
-        "@elysia/eden": "^1.4.10",
         "@eslint/js": "^9.39.5",
-        "elysia": "^1.4.30",
         "esbuild": "^0.28.2",
         "eslint": "^9.39.5",
         "oauth4webapi": "^3.8.8",

@@ -1,5 +1,5 @@
-import { treaty } from '@elysia/eden';
-import type { Elysia } from 'elysia';
+import { createApiRequest } from './http.js';
+import type { ClientOptions } from './http.js';
 
 export interface CalendarConnection {
     id: string;
@@ -35,39 +35,6 @@ export interface CalendarClient {
 
 type RequestOptions = { signal?: AbortSignal };
 
-type Route<Body = unknown, Data = unknown, Query = unknown> = {
-    body: Body;
-    headers: unknown;
-    query: Query;
-    params: Record<string, string>;
-    response: {
-        200: Data;
-        400: { error: string };
-        401: { error: string };
-        404: { error: string };
-        409: { error: string };
-        502: { error: string };
-        503: { error: string };
-    };
-};
-type CalendarApp = Elysia & {
-    '~Routes': {
-        'calendar-connections': {
-            get: Route;
-            google: {
-                authorize: { post: Route };
-                complete: { post: Route<{ state: string; code?: string; denied?: boolean }> };
-            };
-            ':id': {
-                calendars: { get: Route };
-                refresh: { post: Route };
-                delete: Route<unknown, unknown, { retention: 'delete' }>;
-            };
-        };
-        'external-calendars': { ':id': { patch: Route<{ selected: boolean }>; sync: { post: Route } } };
-    };
-};
-
 export class ApiRequestError extends Error {
     constructor(
         public status: number,
@@ -92,21 +59,16 @@ const errorCodes = [
     'UNAUTHORIZED',
     'INVALID_REQUEST',
 ];
-function unwrap(result: { status: number; data: unknown; error: unknown; response?: Response }) {
-    if (!result.response && object(result.error)) {
-        throw result.error.value;
-    }
-
+function unwrap(result: { status: number; body: unknown }) {
     if (result.status !== 200) {
-        const error = object(result.error) ? result.error.value : undefined;
         const code =
-            object(error) && typeof error.error === 'string' && errorCodes.includes(error.error)
-                ? error.error
+            object(result.body) && typeof result.body.error === 'string' && errorCodes.includes(result.body.error)
+                ? result.body.error
                 : 'REQUEST_FAILED';
         throw new ApiRequestError(result.status, code);
     }
 
-    return result.data;
+    return result.body;
 }
 
 function connections(value: unknown): CalendarConnection[] {
@@ -168,21 +130,19 @@ function identity(value: unknown) {
 
 export function createCalendarClient(
     baseUrl: string,
-    options: { jwt?: string; fetcher?: typeof fetch },
+    options: ClientOptions,
 ): CalendarClient {
-    const api = treaty<CalendarApp>(baseUrl.replace(/\/+$/, ''), {
-        fetcher: options.fetcher,
-        headers: options.jwt ? { Authorization: `Bearer ${options.jwt}` } : {},
-        parseDate: false,
-    });
-    const request = ({ signal }: RequestOptions = {}) => ({ fetch: { signal, cache: 'no-store' as const } });
+    const request = createApiRequest(new URL(baseUrl), options);
+    const segment = (value: string) => encodeURIComponent(value);
 
     return {
         async calendarConnections(opts) {
-            return connections(unwrap(await api['calendar-connections'].get(request(opts))));
+            return connections(unwrap(await request('calendar-connections', opts)));
         },
         async authorizeCalendar(opts) {
-            const value = unwrap(await api['calendar-connections'].google.authorize.post({}, request(opts)));
+            const value = unwrap(
+                await request('calendar-connections/google/authorize', { ...opts, method: 'POST' }),
+            );
             if (!object(value) || typeof value.authorizationUrl !== 'string') {
                 throw new Error('Invalid authorization response');
             }
@@ -196,16 +156,37 @@ export function createCalendarClient(
             return { authorizationUrl: url.href };
         },
         async completeCalendarAuthorization(input, opts) {
-            return identity(unwrap(await api['calendar-connections'].google.complete.post(input, request(opts))));
+            return identity(
+                unwrap(
+                    await request('calendar-connections/google/complete', {
+                        ...opts,
+                        method: 'POST',
+                        body: input,
+                    }),
+                ),
+            );
         },
         async connectionCalendars(id, opts) {
-            return calendars(unwrap(await api['calendar-connections']({ id }).calendars.get(request(opts))));
+            return calendars(unwrap(await request(`calendar-connections/${segment(id)}/calendars`, opts)));
         },
         async refreshConnectionCalendars(id, opts) {
-            return calendars(unwrap(await api['calendar-connections']({ id }).refresh.post({}, request(opts))));
+            return calendars(
+                unwrap(
+                    await request(`calendar-connections/${segment(id)}/refresh`, {
+                        ...opts,
+                        method: 'POST',
+                    }),
+                ),
+            );
         },
         async selectExternalCalendar(id, selected, opts) {
-            const value = unwrap(await api['external-calendars']({ id }).patch({ selected }, request(opts)));
+            const value = unwrap(
+                await request(`external-calendars/${segment(id)}`, {
+                    ...opts,
+                    method: 'PATCH',
+                    body: { selected },
+                }),
+            );
             if (!object(value) || typeof value.id !== 'string' || typeof value.selected !== 'boolean') {
                 throw new Error('Invalid selection response');
             }
@@ -213,7 +194,9 @@ export function createCalendarClient(
             return { id: value.id, selected: value.selected };
         },
         async syncExternalCalendar(id, opts) {
-            const value = unwrap(await api['external-calendars']({ id }).sync.post({}, request(opts)));
+            const value = unwrap(
+                await request(`external-calendars/${segment(id)}/sync`, { ...opts, method: 'POST' }),
+            );
             if (!object(value) || (value.status !== 'syncing' && value.status !== 'synced')) {
                 throw new Error('Invalid sync response');
             }
@@ -222,10 +205,11 @@ export function createCalendarClient(
         },
         async disconnectCalendar(id, opts) {
             const value = unwrap(
-                await api['calendar-connections']({ id }).delete(
-                    {},
-                    { ...request(opts), query: { retention: 'delete' } },
-                ),
+                await request(`calendar-connections/${segment(id)}`, {
+                    ...opts,
+                    method: 'DELETE',
+                    query: new URLSearchParams({ retention: 'delete' }),
+                }),
             );
             if (!object(value) || value.disconnected !== true) {
                 throw new Error('Invalid disconnect response');

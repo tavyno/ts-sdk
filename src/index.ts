@@ -1,11 +1,9 @@
 import { createCalendarClient } from './calendar.js';
 import type { CalendarClient } from './calendar.js';
+import { createApiRequest } from './http.js';
 
 export { ApiRequestError } from './calendar.js';
 export type { CalendarConnection, ExternalCalendar } from './calendar.js';
-
-import { treaty } from '@elysia/eden';
-import type { Elysia } from 'elysia';
 
 export type HealthCheckResult =
     { status: 200; data: { status: 'ok'; db: 'ok' } } | { status: 503; data: { status: 'error'; db: 'error' } };
@@ -16,56 +14,30 @@ export interface ApiClient extends CalendarClient {
     healthCheck(options?: { signal?: AbortSignal }): Promise<HealthCheckResult>;
 }
 
-type IdentityRoute = {
-    body: unknown;
-    headers: unknown;
-    query: unknown;
-    params: Record<never, never>;
-    response: { 200: { id: string }; 401: { error: string }; 404: { error: string } };
-};
-
-function readIdentity(result: { status: number; data: unknown; error: unknown; response?: Response }) {
-    if (!result.response && result.error && typeof result.error === 'object' && 'value' in result.error) {
-        throw result.error.value;
-    }
-
+function readIdentity(result: { status: number; body: unknown }) {
     if (result.status !== 200) {
         throw new Error(`Identity request failed (${result.status})`);
     }
 
     if (
-        typeof result.data !== 'object' ||
-        result.data === null ||
-        !('id' in result.data) ||
-        typeof result.data.id !== 'string'
+        typeof result.body !== 'object' ||
+        result.body === null ||
+        !('id' in result.body) ||
+        typeof result.body.id !== 'string'
     ) {
         throw new Error('Invalid identity response');
     }
 
-    return { id: result.data.id };
+    return { id: result.body.id };
 }
 
-// Public wire contract of rest-api GET /health; no Worker or database types.
-type HealthApp = Elysia & {
-    '~Routes': {
-        session: { post: IdentityRoute };
-        me: { get: IdentityRoute };
-        health: {
-            get: {
-                body: unknown;
-                headers: unknown;
-                query: unknown;
-                params: Record<never, never>;
-                response: {
-                    200: { status: 'ok'; db: 'ok' };
-                    503: { status: 'error'; db: 'error' };
-                };
-            };
-        };
-    };
-};
-
-export function createApiClient(baseUrl: string, options: { fetcher?: typeof fetch; jwt?: string } = {}): ApiClient {
+export function createApiClient(
+    baseUrl: string,
+    options: {
+        fetcher?: typeof fetch;
+        getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
+    } = {},
+): ApiClient {
     let url: URL;
     try {
         url = new URL(baseUrl);
@@ -77,32 +49,24 @@ export function createApiClient(baseUrl: string, options: { fetcher?: typeof fet
         throw new Error('Invalid API base URL');
     }
 
-    const api = treaty<HealthApp>(url.href.replace(/\/+$/, ''), {
-        fetcher: options.fetcher,
-        headers: options.jwt ? { Authorization: `Bearer ${options.jwt}` } : {},
-        parseDate: false,
-    });
+    const request = createApiRequest(url, options);
 
     return {
         ...createCalendarClient(url.href, options),
         async establishSession({ signal } = {}) {
-            return readIdentity(await api.session.post({}, { fetch: { signal, cache: 'no-store' } }));
+            return readIdentity(await request('session', { method: 'POST', signal }));
         },
         async me({ signal } = {}) {
-            return readIdentity(await api.me.get({ fetch: { signal, cache: 'no-store' } }));
+            return readIdentity(await request('me', { signal }));
         },
         async healthCheck({ signal } = {}) {
-            const result = await api.health.get({ fetch: { signal, cache: 'no-store' } });
-
-            if (!result.response && result.error) {
-                throw result.error.value;
-            }
+            const result = await request('health', { signal });
 
             if (result.status !== 200 && result.status !== 503) {
                 throw new Error(`Health request failed (${result.status})`);
             }
 
-            const body: unknown = result.error ? result.error.value : result.data;
+            const body = result.body;
 
             if (typeof body === 'object' && body !== null && 'status' in body && 'db' in body) {
                 if (result.status === 200 && body.status === 'ok' && body.db === 'ok') {

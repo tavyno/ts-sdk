@@ -105,16 +105,21 @@ test('preserves a custom cancellation reason', async () => {
     );
 });
 
-test('attaches the caller JWT to public requests as well as protected requests', async () => {
+test('gets the current access token for every request', async () => {
+    let accessToken = 'first.jwt.token';
+    const authorizationHeaders = [];
     const client = createApiClient('https://api.example.com', {
-        jwt: 'caller.jwt.token',
+        getAccessToken: async () => accessToken,
         fetcher: async (_url, init) => {
-            assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer caller.jwt.token');
+            authorizationHeaders.push(new globalThis.Headers(init.headers).get('authorization'));
 
             return Response.json({ status: 'ok', db: 'ok' });
         },
     });
     await client.healthCheck();
+    accessToken = 'rotated.jwt.token';
+    await client.healthCheck();
+    assert.deepEqual(authorizationHeaders, ['Bearer first.jwt.token', 'Bearer rotated.jwt.token']);
 });
 
 test('allows anonymous public requests without inventing a token', async () => {
@@ -131,7 +136,7 @@ test('allows anonymous public requests without inventing a token', async () => {
 test('session and identity methods send JWTs and return only internal user identity', async () => {
     const calls = [];
     const client = createApiClient('https://api.example.com', {
-        jwt: 'access.jwt.token',
+        getAccessToken: () => 'access.jwt.token',
         fetcher: async (url, init) => {
             calls.push([String(url), init.method]);
             assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer access.jwt.token');
@@ -150,7 +155,7 @@ test('session and identity methods send JWTs and return only internal user ident
 test('calendar connection requests use provider-neutral contracts and caller JWT', async () => {
     const calls = [];
     const client = createApiClient('https://api.example.com', {
-        jwt: 'caller.jwt',
+        getAccessToken: () => 'caller.jwt',
         fetcher: async (url, init) => {
             assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer caller.jwt');
             calls.push([String(url), init.method]);
@@ -160,6 +165,24 @@ test('calendar connection requests use provider-neutral contracts and caller JWT
     });
     assert.deepEqual(await client.calendarConnections(), [{ id: 'c', provider: 'google', status: 'connected' }]);
     assert.deepEqual(calls, [['https://api.example.com/calendar-connections', 'GET']]);
+});
+
+test('serializes request bodies with JSON and safely encodes path parameters', async () => {
+    const client = createApiClient('https://api.example.com/v1', {
+        fetcher: async (url, init) => {
+            assert.equal(String(url), 'https://api.example.com/v1/external-calendars/team%2Fcalendar');
+            assert.equal(init.method, 'PATCH');
+            assert.equal(new globalThis.Headers(init.headers).get('content-type'), 'application/json');
+            assert.deepEqual(JSON.parse(init.body), { selected: true });
+
+            return Response.json({ id: 'team/calendar', selected: true });
+        },
+    });
+
+    assert.deepEqual(await client.selectExternalCalendar('team/calendar', true), {
+        id: 'team/calendar',
+        selected: true,
+    });
 });
 
 for (const [method, args, suffix, verb, data] of [
@@ -203,7 +226,7 @@ for (const [method, args, suffix, verb, data] of [
 ]) {
     test(`${method} preserves its wire contract and JWT`, async () => {
         const client = createApiClient('https://api.example.com', {
-            jwt: 'jwt',
+            getAccessToken: () => 'jwt',
             fetcher: async (url, init) => {
                 assert.equal(String(url), `https://api.example.com${suffix}`);
                 assert.equal(init.method, verb);
