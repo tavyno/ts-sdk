@@ -12,12 +12,12 @@ const api = createApiClient('https://your-api.example.com');
 const controller = new AbortController();
 const timeout = setTimeout(() => controller.abort(), 10_000);
 try {
-  const result = await api.healthCheck({ signal: controller.signal });
-  // 200: { status: 'ok', db: 'ok' }
-  // 503: { status: 'error', db: 'error' }
-  console.log(result.status, result.data);
+    const result = await api.healthCheck({ signal: controller.signal });
+    // 200: { status: 'ok', db: 'ok' }
+    // 503: { status: 'error', db: 'error' }
+    console.log(result.status, result.data);
 } finally {
-  clearTimeout(timeout);
+    clearTimeout(timeout);
 }
 ```
 
@@ -123,7 +123,6 @@ AbortController/AbortSignal, TextEncoder, and Web Crypto APIs. React Native host
 must supply compatible Web API/Web Crypto polyfills where their runtime lacks them;
 no Node or DOM module is imported. Package checks cover Next/Expo typings and browser/mobile
 bundling; real-device OAuth still requires testing with the chosen mobile host.
-
 
 ## Calendar integration methods
 
