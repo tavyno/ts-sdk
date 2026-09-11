@@ -1,5 +1,21 @@
-import { createApiRequest } from './http.js';
-import type { ClientOptions } from './http.js';
+import { createFetch } from 'ofetch';
+
+/**
+ * Transport and authentication configuration for Tavyno clients.
+ */
+export type ClientOptions = {
+    /** Fetch implementation used for API requests. */
+    fetcher?: typeof fetch;
+
+    /**
+     * Provides the access token for each request.
+     *
+     * The callback may return a different token on each invocation. Returning
+     * `null`, `undefined`, or an empty string sends the request anonymously.
+     */
+    getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
+};
+
 
 /**
  * Represents an external calendar provider connection owned by the current user.
@@ -147,17 +163,19 @@ const errorCodes = [
     'INVALID_REQUEST',
 ];
 
-function unwrap(result: { status: number; body: unknown }) {
+function unwrap(result: { status: number; _data?: unknown }) {
     if (result.status !== 200) {
         const code =
-            object(result.body) && typeof result.body.error === 'string' && errorCodes.includes(result.body.error)
-                ? result.body.error
+            object(result._data) && typeof result._data.error === 'string' && errorCodes.includes(result._data.error)
+                ? result._data.error
                 : 'REQUEST_FAILED';
+
         throw new ApiRequestError(result.status, code);
     }
 
-    return result.body;
+    return result._data;
 }
+
 
 function connections(value: unknown): CalendarConnection[] {
     if (!Array.isArray(value)) {
@@ -227,16 +245,48 @@ export function createCalendarClient(
     baseUrl: string,
     options: ClientOptions,
 ): CalendarClient {
-    const request = createApiRequest(new URL(baseUrl), options);
+    const rootUrl = baseUrl.replace(/\/+$/, '');
+    const $fetch = createFetch({
+        fetch: options.fetcher ?? globalThis.fetch,
+        defaults: {
+            baseURL: rootUrl,
+            method: 'GET',
+            retry: 0,
+            cache: 'no-store',
+            ignoreResponseError: true,
+            async onRequest({ options: requestOptions }) {
+                const accessToken = await options.getAccessToken?.();
+
+                if (accessToken != null && typeof accessToken !== 'string') {
+                    throw new Error('Invalid access token');
+                }
+
+                if (accessToken) {
+                    requestOptions.headers = new Headers(requestOptions.headers);
+                    requestOptions.headers.set('Authorization', `Bearer ${accessToken}`);
+                }
+            },
+            onRequestError(context) {
+                throw context.error;
+            },
+            parseResponse(text) {
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    return undefined;
+                }
+            },
+        },
+    });
     const segment = (value: string) => encodeURIComponent(value);
 
     return {
         async calendarConnections(opts) {
-            return connections(unwrap(await request('calendar-connections', opts)));
+            return connections(unwrap(await $fetch.raw('calendar-connections', opts)));
         },
         async authorizeCalendar(opts) {
             const value = unwrap(
-                await request('calendar-connections/google/authorize', { ...opts, method: 'POST' }),
+                await $fetch.raw('calendar-connections/google/authorize', { ...opts, method: 'POST' }),
             );
 
             if (!object(value) || typeof value.authorizationUrl !== 'string') {
@@ -254,7 +304,7 @@ export function createCalendarClient(
         async completeCalendarAuthorization(input, opts) {
             return identity(
                 unwrap(
-                    await request('calendar-connections/google/complete', {
+                    await $fetch.raw('calendar-connections/google/complete', {
                         ...opts,
                         method: 'POST',
                         body: input,
@@ -263,12 +313,12 @@ export function createCalendarClient(
             );
         },
         async connectionCalendars(id, opts) {
-            return calendars(unwrap(await request(`calendar-connections/${segment(id)}/calendars`, opts)));
+            return calendars(unwrap(await $fetch.raw(`calendar-connections/${segment(id)}/calendars`, opts)));
         },
         async refreshConnectionCalendars(id, opts) {
             return calendars(
                 unwrap(
-                    await request(`calendar-connections/${segment(id)}/refresh`, {
+                    await $fetch.raw(`calendar-connections/${segment(id)}/refresh`, {
                         ...opts,
                         method: 'POST',
                     }),
@@ -277,7 +327,7 @@ export function createCalendarClient(
         },
         async selectExternalCalendar(id, selected, opts) {
             const value = unwrap(
-                await request(`external-calendars/${segment(id)}`, {
+                await $fetch.raw(`external-calendars/${segment(id)}`, {
                     ...opts,
                     method: 'PATCH',
                     body: { selected },
@@ -292,7 +342,7 @@ export function createCalendarClient(
         },
         async syncExternalCalendar(id, opts) {
             const value = unwrap(
-                await request(`external-calendars/${segment(id)}/sync`, { ...opts, method: 'POST' }),
+                await $fetch.raw(`external-calendars/${segment(id)}/sync`, { ...opts, method: 'POST' }),
             );
 
             if (!object(value) || (value.status !== 'syncing' && value.status !== 'synced')) {
@@ -303,10 +353,10 @@ export function createCalendarClient(
         },
         async disconnectCalendar(id, opts) {
             const value = unwrap(
-                await request(`calendar-connections/${segment(id)}`, {
+                await $fetch.raw(`calendar-connections/${segment(id)}`, {
                     ...opts,
                     method: 'DELETE',
-                    query: new URLSearchParams({ retention: 'delete' }),
+                    query: { retention: 'delete' },
                 }),
             );
 
@@ -318,3 +368,4 @@ export function createCalendarClient(
         },
     };
 }
+
