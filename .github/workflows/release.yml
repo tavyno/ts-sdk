@@ -1,12 +1,13 @@
 name: Publish @tavyno/ts-sdk
 on:
+    pull_request:
     push:
-        branches: [main]
+    workflow_dispatch:
 permissions:
     contents: read
 concurrency:
-    group: npm-release
-    cancel-in-progress: false
+    group: release-${{ github.ref }}
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
     validate:
         runs-on: ubuntu-latest
@@ -133,8 +134,12 @@ jobs:
             - run: npm run test:package
     publish:
         needs: validate
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         environment: npm
         runs-on: ubuntu-latest
+        concurrency:
+            group: npm-release
+            cancel-in-progress: false
         permissions:
             contents: read
             id-token: write
