@@ -33,14 +33,17 @@ export function createApiRequest(baseUrl: URL, options: ClientOptions): ApiReque
         }
 
         const accessToken = await options.getAccessToken?.();
+
         if (accessToken != null && typeof accessToken !== 'string') {
             throw new Error('Invalid access token');
         }
 
         const headers = new Headers();
+
         if (accessToken) {
             headers.set('Authorization', `Bearer ${accessToken}`);
         }
+
         if (requestOptions.body !== undefined) {
             headers.set('Content-Type', 'application/json');
         }

@@ -12,6 +12,7 @@ const metadata = {
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['RS256'],
 };
+
 test('creates provider-neutral PKCE transactions without browser navigation or client secrets', async () => {
     const client = createOAuthClient({
         issuer: metadata.issuer,

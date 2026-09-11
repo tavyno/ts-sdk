@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const consumer = mkdtempSync(join(tmpdir(), 'tavyno-consumer-'));
 const run = (command, args, cwd = consumer) => execFileSync(command, args, { cwd, stdio: 'pipe' });
+
 try {
     const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', consumer], root));
     assert.deepEqual(packed[0].files.map((file) => file.path).sort(), [
@@ -32,8 +33,15 @@ createApiClient('https://example.com', { getAccessToken: async () => 'token' });
 // @ts-expect-error Raw tokens are not accepted because they become stale after refresh.
 createApiClient('https://example.com', { jwt: 'token' });
 const result: HealthCheckResult = await client.healthCheck();
-if (result.status === 200) { const healthy: 'ok' = result.data.db; void healthy; }
-else { const unhealthy: 'error' = result.data.db; void unhealthy; }
+
+if (result.status === 200) {
+    const healthy: 'ok' = result.data.db;
+    void healthy;
+} else {
+    const unhealthy: 'error' = result.data.db;
+    void unhealthy;
+}
+
 // @ts-expect-error No arbitrary user-listing API is exposed.
 client.users();
 `,
@@ -78,8 +86,9 @@ client.users();
 import assert from 'node:assert/strict';
 import { createApiClient } from '@tavyno/ts-sdk';
 const result = await createApiClient('https://example.com', {
-  fetcher: async () => Response.json({ status: 'ok', db: 'ok' })
+    fetcher: async () => Response.json({ status: 'ok', db: 'ok' }),
 }).healthCheck();
+
 assert.equal(result.data.db, 'ok');
 `,
     ]);

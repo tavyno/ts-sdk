@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApiClient } from '../dist/index.js';
 
-for (const [status, data] of [
+for (const [status, expectedResponse] of [
     [200, { status: 'ok', db: 'ok' }],
     [503, { status: 'error', db: 'error' }],
 ]) {
@@ -15,10 +15,11 @@ for (const [status, data] of [
                 assert.equal(init.signal, signal);
                 assert.equal(init.cache, 'no-store');
 
-                return Response.json(data, { status });
+                return Response.json(expectedResponse, { status });
             },
         });
-        assert.deepEqual(await client.healthCheck({ signal }), { status, data });
+
+        assert.deepEqual(await client.healthCheck({ signal }), { status, data: expectedResponse });
     });
 }
 
@@ -185,7 +186,7 @@ test('serializes request bodies with JSON and safely encodes path parameters', a
     });
 });
 
-for (const [method, args, suffix, verb, data] of [
+for (const [method, args, suffix, verb, expectedResponse] of [
     [
         'authorizeCalendar',
         [],
@@ -232,9 +233,10 @@ for (const [method, args, suffix, verb, data] of [
                 assert.equal(init.method, verb);
                 assert.equal(new globalThis.Headers(init.headers).get('authorization'), 'Bearer jwt');
 
-                return Response.json(data);
+                return Response.json(expectedResponse);
             },
         });
-        assert.deepEqual(await client[method](...args), data);
+
+        assert.deepEqual(await client[method](...args), expectedResponse);
     });
 }

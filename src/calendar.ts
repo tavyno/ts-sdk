@@ -146,6 +146,7 @@ const errorCodes = [
     'UNAUTHORIZED',
     'INVALID_REQUEST',
 ];
+
 function unwrap(result: { status: number; body: unknown }) {
     if (result.status !== 200) {
         const code =
@@ -237,6 +238,7 @@ export function createCalendarClient(
             const value = unwrap(
                 await request('calendar-connections/google/authorize', { ...opts, method: 'POST' }),
             );
+
             if (!object(value) || typeof value.authorizationUrl !== 'string') {
                 throw new Error('Invalid authorization response');
             }
@@ -281,6 +283,7 @@ export function createCalendarClient(
                     body: { selected },
                 }),
             );
+
             if (!object(value) || typeof value.id !== 'string' || typeof value.selected !== 'boolean') {
                 throw new Error('Invalid selection response');
             }
@@ -291,6 +294,7 @@ export function createCalendarClient(
             const value = unwrap(
                 await request(`external-calendars/${segment(id)}/sync`, { ...opts, method: 'POST' }),
             );
+
             if (!object(value) || (value.status !== 'syncing' && value.status !== 'synced')) {
                 throw new Error('Invalid sync response');
             }
@@ -305,6 +309,7 @@ export function createCalendarClient(
                     query: new URLSearchParams({ retention: 'delete' }),
                 }),
             );
+
             if (!object(value) || value.disconnected !== true) {
                 throw new Error('Invalid disconnect response');
             }
