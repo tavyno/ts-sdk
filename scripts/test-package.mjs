@@ -14,7 +14,6 @@ try {
         'README.md',
         'THIRD_PARTY_NOTICES',
         'dist/calendar.d.ts',
-        'dist/http.d.ts',
         'dist/index.d.ts',
         'dist/index.js',
         'dist/oauth.d.ts',

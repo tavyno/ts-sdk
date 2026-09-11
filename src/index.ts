@@ -1,9 +1,9 @@
 import { createCalendarClient } from './calendar.js';
-import type { CalendarClient } from './calendar.js';
-import { createApiRequest } from './http.js';
+import type { CalendarClient, ClientOptions } from './calendar.js';
+import { createFetch } from 'ofetch';
 
 export { ApiRequestError } from './calendar.js';
-export type { CalendarConnection, ExternalCalendar } from './calendar.js';
+export type { CalendarConnection, ExternalCalendar, ClientOptions } from './calendar.js';
 
 /**
  * Represents the operational state of the Tavyno API and its database.
@@ -77,18 +77,7 @@ function readIdentity(result: { status: number; body: unknown }) {
  */
 export function createApiClient(
     baseUrl: string,
-    options: {
-        /** Fetch implementation used for API requests. */
-        fetcher?: typeof fetch;
-
-        /**
-         * Provides the access token for each request.
-         *
-         * The callback may return a different token on each invocation. Returning
-         * `null`, `undefined`, or an empty string sends the request anonymously.
-         */
-        getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
-    } = {},
+    options: ClientOptions = {},
 ): ApiClient {
     let url: URL;
     try {
@@ -101,31 +90,67 @@ export function createApiClient(
         throw new Error('Invalid API base URL');
     }
 
-    const request = createApiRequest(url, options);
+    const rootUrl = url.href.replace(/\/+$/, '');
+    const $fetch = createFetch({
+        fetch: options.fetcher ?? globalThis.fetch,
+        defaults: {
+            baseURL: rootUrl,
+            method: 'GET',
+            retry: 0,
+            cache: 'no-store',
+            ignoreResponseError: true,
+            async onRequest({ options: requestOptions }) {
+                const accessToken = await options.getAccessToken?.();
+
+                if (accessToken != null && typeof accessToken !== 'string') {
+                    throw new Error('Invalid access token');
+                }
+
+                if (accessToken) {
+                    requestOptions.headers = new Headers(requestOptions.headers);
+                    requestOptions.headers.set('Authorization', `Bearer ${accessToken}`);
+                }
+            },
+            onRequestError(context) {
+                throw context.error;
+            },
+            parseResponse(text) {
+                try {
+                    return JSON.parse(text);
+                } catch {
+                    return undefined;
+                }
+            },
+        },
+    });
 
     return {
         ...createCalendarClient(url.href, options),
         async establishSession({ signal } = {}) {
-            return readIdentity(await request('session', { method: 'POST', signal }));
+            const response = await $fetch.raw('session', { method: 'POST', signal });
+
+            return readIdentity({ status: response.status, body: response._data });
         },
         async me({ signal } = {}) {
-            return readIdentity(await request('me', { signal }));
+            const response = await $fetch.raw('me', { signal });
+
+            return readIdentity({ status: response.status, body: response._data });
         },
         async healthCheck({ signal } = {}) {
-            const result = await request('health', { signal });
+            const response = await $fetch.raw('health', { signal });
 
-            if (result.status !== 200 && result.status !== 503) {
-                throw new Error(`Health request failed (${result.status})`);
+            if (response.status !== 200 && response.status !== 503) {
+                throw new Error(`Health request failed (${response.status})`);
             }
 
-            const body = result.body;
+            const body = response._data;
 
             if (typeof body === 'object' && body !== null && 'status' in body && 'db' in body) {
-                if (result.status === 200 && body.status === 'ok' && body.db === 'ok') {
+                if (response.status === 200 && body.status === 'ok' && body.db === 'ok') {
                     return { status: 200, data: { status: 'ok', db: 'ok' } };
                 }
 
-                if (result.status === 503 && body.status === 'error' && body.db === 'error') {
+                if (response.status === 503 && body.status === 'error' && body.db === 'error') {
                     return { status: 503, data: { status: 'error', db: 'error' } };
                 }
             }
@@ -134,6 +159,7 @@ export function createApiClient(
         },
     };
 }
+
 
 export { createOAuthClient, readLoginTransaction, readOAuthTokens, OAuthError } from './oauth.js';
 export type { OAuthConfig, OAuthTokens, LoginTransaction } from './oauth.js';
