@@ -25,4 +25,5 @@ This repo is API wrapper so this must not handle UI logic and must not be used i
 - Use Web Standard APIs only: no Node, Bun, filesystem, DOM, React, Next.js, or Worker-specific imports. Callers supply configuration and deployment URLs; the SDK does not read environment variables or embed credentials.
 - Use Node's test runner with fake fetch boundaries. Packaging tests must verify the tarball, ESM, declarations, and web/mobile compatibility.
 - Publish only through the approved GitHub release workflow using npm OIDC Trusted Publishing. Do not publish, push tags, or change registry/account configuration unless asked.
+- If the active git branch is not `main`, commit changes in logical parts. Do not push.
 - Keep provider-specific SDKs, navigation, React hooks, token storage, and secure storage in hosts; the shared client owns provider-neutral OAuth/PKCE and API/session calls.
