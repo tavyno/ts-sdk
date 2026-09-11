@@ -1,3 +1,5 @@
+import { createFetch, FetchError } from 'ofetch';
+
 export type ClientOptions = {
     fetcher?: typeof fetch;
     getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
@@ -22,7 +24,9 @@ export type ApiRequest = (
 ) => Promise<ApiResponse>;
 
 export function createApiRequest(baseUrl: URL, options: ClientOptions): ApiRequest {
-    const fetcher = options.fetcher ?? globalThis.fetch;
+    const $fetch = createFetch({
+        fetch: options.fetcher ?? globalThis.fetch,
+    });
     const rootUrl = baseUrl.href.replace(/\/+$/, '');
 
     return async (path, requestOptions = {}) => {
@@ -48,21 +52,32 @@ export function createApiRequest(baseUrl: URL, options: ClientOptions): ApiReque
             headers.set('Content-Type', 'application/json');
         }
 
-        const response = await fetcher(url.href, {
-            method: requestOptions.method ?? 'GET',
-            headers,
-            body: requestOptions.body === undefined ? undefined : JSON.stringify(requestOptions.body),
-            signal: requestOptions.signal,
-            cache: 'no-store',
-        });
-
-        let body: unknown;
         try {
-            body = await response.json();
-        } catch {
-            body = undefined;
-        }
+            const response = await $fetch.raw(url.href, {
+                method: requestOptions.method ?? 'GET',
+                headers,
+                body: requestOptions.body === undefined ? undefined : JSON.stringify(requestOptions.body),
+                signal: requestOptions.signal,
+                cache: 'no-store',
+                retry: 0,
+                ignoreResponseError: true,
+                parseResponse: (text) => {
+                    try {
+                        return JSON.parse(text);
+                    } catch {
+                        return undefined;
+                    }
+                },
+            });
 
-        return { status: response.status, body };
+            return { status: response.status, body: response._data };
+        } catch (error) {
+            if (error instanceof FetchError && error.cause !== undefined) {
+                throw error.cause;
+            }
+
+            throw error;
+        }
     };
 }
+

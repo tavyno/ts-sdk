@@ -1,6 +1,6 @@
 {
     "name": "@tavyno/ts-sdk",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "description": "Typed Tavyno REST API client for web and React Native",
     "type": "module",
     "main": "./dist/index.js",
@@ -39,6 +39,7 @@
         "esbuild": "^0.28.2",
         "eslint": "^9.39.5",
         "oauth4webapi": "^3.8.8",
+        "ofetch": "^1.5.1",
         "typescript": "^5.9.3",
         "typescript-eslint": "^8.70.0"
     }
