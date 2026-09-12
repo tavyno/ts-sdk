@@ -1,6 +1,10 @@
 import { createCalendarClient } from './calendar.js';
 import type { CalendarClient, ClientOptions } from './calendar.js';
-import { createFetch } from 'ofetch';
+import { createApiFetch } from './transport.js';
+import { createScheduleClient } from './schedule.js';
+import type { ScheduleClient } from './schedule-contracts.js';
+
+export type * from './schedule-contracts.js';
 
 export { ApiRequestError } from './calendar.js';
 export type { CalendarConnection, ExternalCalendar, ClientOptions } from './calendar.js';
@@ -17,7 +21,7 @@ export type HealthCheckResult =
  * Request methods accept an optional abort signal and propagate cancellation and
  * transport failures from the configured fetch implementation.
  */
-export interface ApiClient extends CalendarClient {
+export interface ApiClient extends CalendarClient, ScheduleClient {
     /**
      * Establishes a Tavyno session for the current access token.
      *
@@ -90,42 +94,11 @@ export function createApiClient(
         throw new Error('Invalid API base URL');
     }
 
-    const rootUrl = url.href.replace(/\/+$/, '');
-    const $fetch = createFetch({
-        fetch: options.fetcher ?? globalThis.fetch,
-        defaults: {
-            baseURL: rootUrl,
-            method: 'GET',
-            retry: 0,
-            cache: 'no-store',
-            ignoreResponseError: true,
-            async onRequest({ options: requestOptions }) {
-                const accessToken = await options.getAccessToken?.();
-
-                if (accessToken != null && typeof accessToken !== 'string') {
-                    throw new Error('Invalid access token');
-                }
-
-                if (accessToken) {
-                    requestOptions.headers = new Headers(requestOptions.headers);
-                    requestOptions.headers.set('Authorization', `Bearer ${accessToken}`);
-                }
-            },
-            onRequestError(context) {
-                throw context.error;
-            },
-            parseResponse(text) {
-                try {
-                    return JSON.parse(text);
-                } catch {
-                    return undefined;
-                }
-            },
-        },
-    });
+    const $fetch = createApiFetch(url.href, options);
 
     return {
         ...createCalendarClient(url.href, options),
+        ...createScheduleClient(url.href, options),
         async establishSession({ signal } = {}) {
             const response = await $fetch.raw('session', { method: 'POST', signal });
 
@@ -159,7 +132,6 @@ export function createApiClient(
         },
     };
 }
-
 
 export { createOAuthClient, readLoginTransaction, readOAuthTokens, OAuthError } from './oauth.js';
 export type { OAuthConfig, OAuthTokens, LoginTransaction } from './oauth.js';

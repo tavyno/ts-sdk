@@ -51,20 +51,13 @@ file allowlist, runs ESM, and checks strict Next-style, Expo-style and NodeNext
 TypeScript consumers. Browser/react-native-condition bundle checks catch runtime
 imports; these are compatibility smoke tests, not an Expo device test.
 
-Until the first npm release, the web repository uses a checked-in tarball under
-`vendor/`, making clean installs independent of sibling checkouts. Refresh it:
-
-```sh
-npm run check && npm run test:package
-npm pack --pack-destination ../web/vendor
-cd ../web
-npm install ./vendor/tavyno-ts-sdk-0.1.0.tgz
-npm test && npm run typecheck && npm run lint && npm run build
-```
-
-After publishing, replace the web file dependency with the released registry
-version: `npm install @tavyno/ts-sdk@0.1.0`. No publishing has been performed
-as part of this initial scaffold.
+Released consumers use the published npm version. For a coordinated review of an
+unreleased SDK change, create a package with `npm pack --pack-destination /tmp` after
+checks pass. A consumer may commit that tarball only with an explicit, reviewed
+source-commit/integrity manifest and matching dependency verification; its normal
+published-package check must not be silently bypassed. Replace the review artifact
+with the registry version after the approved release. No publishing is needed to
+review or verify the package locally.
 
 ## Versioning and release
 
@@ -135,3 +128,75 @@ Every method uses the configured JWT. Sync processes one provider page per reque
 continue while the returned status is `syncing`, and pass an AbortSignal to pause.
 Disconnect deletes the integration's cached imports (`retention=delete`).
 Provider credentials are never included in client contracts.
+
+
+## Canonical calendar, Events and Event Groups
+
+These methods implement the provider-neutral boundaries from
+[SRS MVP v0.4](https://github.com/tavyno/project/blob/main/docs/requirements/srs-mvp-v0.4.md)
+and [project issue #4](https://github.com/tavyno/project/issues/4). All ownership
+comes from the authenticated Tavyno user; no method accepts a user or provider ID.
+
+```ts
+const { calendars } = await client.calendars();
+const calendar = calendars.find((item) => item.isDefault);
+if (!calendar) throw new Error('Default calendar unavailable');
+
+const event = await client.createEvent({
+    calendarId: calendar.id,
+    title: 'Weekly lecture',
+    start: '2026-09-12T09:00:00-04:00',
+    end: '2026-09-12T10:00:00-04:00',
+    timeZone: 'America/New_York',
+    allDay: false,
+    recurrence: ['RRULE:FREQ=WEEKLY;COUNT=10'],
+});
+const group = await client.createEventGroup({ name: 'Course' });
+await client.addEventGroupMember(group.id, event.id);
+const schedule = await client.events({
+    start: '2026-09-01T00:00:00Z',
+    end: '2026-10-01T00:00:00Z',
+    groupId: group.id,
+});
+```
+
+| Resource | Methods |
+| --- | --- |
+| Calendars | `calendars`, `createCalendar`, `updateCalendar`, `deleteCalendar` |
+| Events | `events`, `event`, `createEvent`, `updateEvent`, `deleteEvent` |
+| Groups | `eventGroups`, `eventGroup`, `createEventGroup`, `updateEventGroup`, `deleteEventGroup` |
+| Membership | `addEventGroupMember`, `removeEventGroupMember` |
+
+`calendars()` and `eventGroups()` return `{ calendars }` and `{ groups }`.
+`events(range)` returns canonical `{ events, occurrences }`, with optional
+`calendarId` and `groupId` filters. `eventGroup(id, { start, end })` includes the
+Group, member Events, derived occurrences in that window and generic Field
+projections. Reads use persisted Tavyno state; they do not contact providers.
+
+All-day schedule values are `YYYY-MM-DD` dates with exclusive end dates. Timed
+values are ISO timestamps with an IANA `timeZone`. The host owns date presentation,
+calendar navigation, loading/error state and choice of range. Recurrence uses the
+REST API's supported recurrence rules; the SDK does not expand occurrences.
+
+Event `groups` are series memberships inherited by every occurrence, including
+future ones. An Event may have several Groups. Deleting a Group leaves member
+Events intact. Schedule mutations default to the entire Event/series. Pass
+`{ scope: 'occurrence', occurrenceId }` as the request options to edit or cancel a
+single occurrence; its canonical ID stays stable when the instance moves.
+Occurrence edits support title, description, location, start, end, timeZone and
+allDay, excluding calendarId and recurrence. Provider-backed schedule fields remain
+read-only; use `origin` and `capabilities` to present the correct host controls.
+
+Event and Group details expose generic `FieldContext` projections; installation,
+schema rendering, binding/value writes and the Marketplace belong to their separate
+feature contracts. This release does not implement those APIs. Values are copied as
+JSON documents with a defensive maximum nesting depth of 32. Unknown wire fields
+are discarded, including any accidental provider payload or credential fields.
+
+Every operation accepts an optional `signal`, obtains the latest access token and
+uses uncached requests without retries. Documented errors reject with
+`ApiRequestError`, including `INVALID_REQUEST`, `RANGE_TOO_LARGE`, `UNAUTHORIZED`,
+`NOT_FOUND` and `READ_ONLY`; unknown HTTP errors use `REQUEST_FAILED`. Malformed
+successful responses reject separately with `Invalid schedule response`, and
+transport/cancellation failures preserve their original reason. No private response
+body is included in these errors.
