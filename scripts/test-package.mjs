@@ -9,7 +9,9 @@ const consumer = mkdtempSync(join(tmpdir(), 'tavyno-consumer-'));
 const run = (command, args, cwd = consumer) => execFileSync(command, args, { cwd, stdio: 'pipe' });
 
 try {
-    const packed = JSON.parse(run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', consumer], root));
+    const packed = JSON.parse(
+        run('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', consumer], root),
+    );
     assert.deepEqual(packed[0].files.map((file) => file.path).sort(), [
         'README.md',
         'THIRD_PARTY_NOTICES',
@@ -17,6 +19,10 @@ try {
         'dist/index.d.ts',
         'dist/index.js',
         'dist/oauth.d.ts',
+        'dist/schedule-contracts.d.ts',
+        'dist/schedule-responses.d.ts',
+        'dist/schedule.d.ts',
+        'dist/transport.d.ts',
         'package.json',
     ]);
     writeFileSync(join(consumer, 'package.json'), '{"private":true,"type":"module"}');
@@ -26,7 +32,7 @@ try {
     writeFileSync(
         join(consumer, 'consumer.ts'),
         `
-import { createApiClient, type ApiClient, type HealthCheckResult } from '@tavyno/ts-sdk';
+import { createApiClient, type ApiClient, type HealthCheckResult, type TavynoEvent, type EventOccurrence, type EventGroupDetail } from '@tavyno/ts-sdk';
 const client: ApiClient = createApiClient('https://example.com');
 createApiClient('https://example.com', { getAccessToken: async () => 'token' });
 // @ts-expect-error Raw tokens are not accepted because they become stale after refresh.
@@ -40,6 +46,19 @@ if (result.status === 200) {
     const unhealthy: 'error' = result.data.db;
     void unhealthy;
 }
+
+const schedule = await client.events({ start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z' });
+const events: TavynoEvent[] = schedule.events;
+const occurrences: EventOccurrence[] = schedule.occurrences;
+const detail: EventGroupDetail = await client.eventGroup('group', { start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z' });
+void [events, occurrences, detail];
+await client.updateEvent('event', { title: 'Moved' }, { scope: 'occurrence', occurrenceId: 'occurrence' });
+// @ts-expect-error A single-occurrence edit requires its canonical identifier.
+client.updateEvent('event', { title: 'Moved' }, { scope: 'occurrence' });
+// @ts-expect-error Ownership cannot be chosen by the host.
+client.createCalendar({ name: 'Calendar', timeZone: 'UTC', userId: 'other-user' });
+// @ts-expect-error Membership references an Event, never a provider or occurrence ID field.
+client.addEventGroupMember('group', { occurrenceId: 'occurrence' });
 
 // @ts-expect-error No arbitrary user-listing API is exposed.
 client.users();
@@ -89,6 +108,10 @@ const result = await createApiClient('https://example.com', {
 }).healthCheck();
 
 assert.equal(result.data.db, 'ok');
+const schedule = await createApiClient('https://example.com', {
+    fetcher: async () => Response.json({ events: [], occurrences: [] }),
+}).events({ start: '2026-09-01T00:00:00Z', end: '2026-10-01T00:00:00Z' });
+assert.deepEqual(schedule, { events: [], occurrences: [] });
 `,
     ]);
     process.stdout.write(
